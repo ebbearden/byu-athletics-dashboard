@@ -51,7 +51,7 @@ def clean_opponent_name(name):
 # --- Data Loading & Caching ---
 @st.cache_data
 def load_and_clean_data():
-    file_path = "BYU Sporting Events History.xlsx - Sporting_Events.csv"
+    file_path = "Sporting_Events.csv"
     
     try:
         df = pd.read_csv(file_path)
