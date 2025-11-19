@@ -18,25 +18,30 @@ st.set_page_config(
 def clean_opponent_name(name):
     """Standardizes opponent names to avoid duplicates."""
     name = str(name).strip()
+    
     # This dictionary maps "Bad Name" : "Good Name"
     mappings = {
         "SDSU": "San Diego State",
         "San Diego St.": "San Diego State",
         "San Diego St": "San Diego State",
-        "Boise St": "Boise State",          # <-- Added this
-        "Boise St.": "Boise State",         # <-- Added this just in case
+        "Boise St": "Boise State",
+        "Boise St.": "Boise State",
         "UVU": "Utah Valley",
         "Utah Valley State": "Utah Valley",
         "USC": "Southern California",
         "Southern Cal": "Southern California",
         "Ole Miss": "Mississippi",
         "LSU": "Louisiana State",
-        "Wash St": "Washington State",      # <-- Likely another one you'll see
-        "Fresno St": "Fresno State"         # <-- And another
+        "Wash St": "Washington State",
+        "Fresno St": "Fresno State"
     }
+    
     if name in mappings: return mappings[name]
-    name = name.replace(".", "")
+    
+    # General Cleanup Rules
+    name = name.replace(".", "")        # Turns "St." into "St"
     if name.endswith(" Univ"): name = name.replace(" Univ", "")
+    
     return name
 
 def fetch_ncaa_results(sport_slug="football", division="fbs", team_name="BYU"):
@@ -94,6 +99,10 @@ def load_data():
         df.columns = df.columns.str.strip()
         df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
         
+        # Safety Net: Filter out future dates (e.g. 2074 errors)
+        current_year = pd.Timestamp.now().year
+        df = df[df['Date'].dt.year <= current_year + 1]
+
         # Clean Names
         df['Opponent_Raw'] = df['Opposing Team'].fillna("Unknown").astype(str)
         df['Opposing Team'] = df['Opponent_Raw'].apply(clean_opponent_name)
@@ -125,7 +134,10 @@ if mode == "Admin Update":
     st.title("🔐 Admin Data Portal")
     password = st.text_input("Enter Admin Password", type="password")
     
-    if password == "cougars123": # Change this password!
+    # Check for password in secrets, fallback to hardcoded for safety
+    stored_password = st.secrets.get("ADMIN_PASSWORD", "cougars123")
+    
+    if password == stored_password:
         st.success("Access Granted")
         
         # SECTION A: NCAA FETCH
@@ -233,50 +245,85 @@ else:
         # Filter Data
         filtered = df[df['Opposing Team'] == selected_opponent]
         
-        # Calculate Record
-        wins = len(filtered[filtered['Result'] == 'Win'])
-        losses = len(filtered[filtered['Result'] == 'Loss'])
-        ties = len(filtered[filtered['Result'] == 'Tie'])
-        total = wins + losses + ties
-        win_pct = (wins / total * 100) if total > 0 else 0
-        
-        # Header
         st.title(f"BYU vs. {selected_opponent}")
         
-        # Metrics
-        c1, c2, c3, c4 = st.columns(4)
-        c1.metric("Total Games", total)
-        c2.metric("Overall Record", f"{wins}-{losses}-{ties}")
-        c3.metric("Win Percentage", f"{win_pct:.1f}%")
+        # --- NEW SUMMARY TABLE ---
+        # 1. Aggregate by Sport
+        stats_rows = []
+        for sport in sorted(filtered['Sport'].unique()):
+            s_df = filtered[filtered['Sport'] == sport]
+            wins = len(s_df[s_df['Result'] == 'Win'])
+            losses = len(s_df[s_df['Result'] == 'Loss'])
+            ties = len(s_df[s_df['Result'] == 'Tie'])
+            total = wins + losses + ties
+            pct = (wins / total * 100) if total > 0 else 0
+            
+            stats_rows.append({
+                "Sport": sport,
+                "Wins": wins,
+                "Losses": losses,
+                "Ties": ties,
+                "Total Games": total,
+                "Win %": f"{pct:.1f}%"
+            })
+            
+        stats_df = pd.DataFrame(stats_rows)
         
-        # Best Sport
-        sport_wins = filtered[filtered['Result'] == 'Win'].groupby('Sport').size()
-        if not sport_wins.empty:
-            best_sport = sport_wins.idxmax()
-            c4.metric("Most Success In", best_sport, f"{sport_wins.max()} Wins")
+        # 2. Calculate Grand Total
+        total_wins = len(filtered[filtered['Result'] == 'Win'])
+        total_losses = len(filtered[filtered['Result'] == 'Loss'])
+        total_ties = len(filtered[filtered['Result'] == 'Tie'])
+        grand_total = total_wins + total_losses + total_ties
+        total_pct = (total_wins / grand_total * 100) if grand_total > 0 else 0
+        
+        total_row = {
+            "Sport": "TOTAL (All Sports)",
+            "Wins": total_wins,
+            "Losses": total_losses,
+            "Ties": total_ties,
+            "Total Games": grand_total,
+            "Win %": f"{total_pct:.1f}%"
+        }
+        
+        # 3. Combine and Display
+        final_table = pd.concat([stats_df, pd.DataFrame([total_row])], ignore_index=True)
+        
+        st.dataframe(
+            final_table, 
+            use_container_width=True, 
+            hide_index=True,
+            column_config={
+                "Sport": st.column_config.TextColumn("Sport", width="medium"),
+                "Win %": st.column_config.TextColumn("Win %", width="small")
+            }
+        )
         
         st.divider()
         
-        # Visuals
-        c_left, c_right = st.columns(2)
+        # --- EXISTING CHARTS & LOGS ---
         
-        with c_left:
-            st.subheader("Record by Sport")
-            breakdown = filtered.groupby(['Sport', 'Result']).size().reset_index(name='Count')
-            color_map = {"Win": "#002E62", "Loss": "#A9A9A9", "Tie": "#CCCCCC"}
-            fig_bar = px.bar(breakdown, x='Sport', y='Count', color='Result', color_discrete_map=color_map, barmode='group')
-            st.plotly_chart(fig_bar, use_container_width=True)
-            
-        with c_right:
-            st.subheader("Result Timeline")
-            fig_scatter = px.scatter(filtered.sort_values('Date'), x='Date', y='Sport', color='Result', 
-                                     color_discrete_map=color_map, hover_data=['Score', 'Location'])
-            st.plotly_chart(fig_scatter, use_container_width=True)
+        st.subheader("Result Timeline")
+        # Timeline Chart
+        color_map = {"Win": "#002E62", "Loss": "#A9A9A9", "Tie": "#CCCCCC"}
+        fig_scatter = px.scatter(
+            filtered.sort_values('Date'), 
+            x='Date', 
+            y='Sport', 
+            color='Result', 
+            color_discrete_map=color_map, 
+            hover_data=['Score', 'Location'],
+            height=350
+        )
+        fig_scatter.update_traces(marker=dict(size=12))
+        st.plotly_chart(fig_scatter, use_container_width=True)
             
         # Data Table
         st.subheader("Full Game Log")
         st.dataframe(
             filtered[['Date', 'Sport', 'Result', 'Score', 'Location']].sort_values('Date', ascending=False),
             use_container_width=True,
-            hide_index=True
+            hide_index=True,
+            column_config={
+                "Date": st.column_config.DateColumn("Date", format="YYYY-MM-DD")
+            }
         )
