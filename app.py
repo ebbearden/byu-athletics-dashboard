@@ -247,60 +247,75 @@ else:
         
         st.title(f"BYU vs. {selected_opponent}")
         
-        # --- NEW SUMMARY TABLE ---
-        # 1. Aggregate by Sport
+        # --- 1. TOP ROW: COMPOSITE METRICS ---
+        wins = len(filtered[filtered['Result'] == 'Win'])
+        losses = len(filtered[filtered['Result'] == 'Loss'])
+        ties = len(filtered[filtered['Result'] == 'Tie'])
+        total = wins + losses + ties
+        win_pct = (wins / total * 100) if total > 0 else 0
+        
+        # Best Sport Calculation
+        sport_wins = filtered[filtered['Result'] == 'Win'].groupby('Sport').size()
+        best_sport_name = "N/A"
+        best_sport_count = 0
+        if not sport_wins.empty:
+            best_sport_name = sport_wins.idxmax()
+            best_sport_count = sport_wins.max()
+
+        # Display Metrics
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Composite Record", f"{wins}-{losses}-{ties}")
+        c2.metric("Composite Win %", f"{win_pct:.1f}%")
+        c3.metric("Most Successful Sport", best_sport_name, f"{best_sport_count} Wins")
+        
+        st.divider()
+        
+        # --- 2. SPORT BREAKDOWN TABLE ---
+        st.subheader("Record Breakdown by Sport")
         stats_rows = []
         for sport in sorted(filtered['Sport'].unique()):
             s_df = filtered[filtered['Sport'] == sport]
-            wins = len(s_df[s_df['Result'] == 'Win'])
-            losses = len(s_df[s_df['Result'] == 'Loss'])
-            ties = len(s_df[s_df['Result'] == 'Tie'])
-            total = wins + losses + ties
-            pct = (wins / total * 100) if total > 0 else 0
+            s_wins = len(s_df[s_df['Result'] == 'Win'])
+            s_losses = len(s_df[s_df['Result'] == 'Loss'])
+            s_ties = len(s_df[s_df['Result'] == 'Tie'])
+            s_total = s_wins + s_losses + s_ties
+            s_pct = (s_wins / s_total * 100) if s_total > 0 else 0
             
             stats_rows.append({
                 "Sport": sport,
-                "Wins": wins,
-                "Losses": losses,
-                "Ties": ties,
-                "Total Games": total,
-                "Win %": f"{pct:.1f}%"
+                "Wins": s_wins,
+                "Losses": s_losses,
+                "Ties": s_ties,
+                "Total Games": s_total,
+                "Win %": f"{s_pct:.1f}%"
             })
             
         stats_df = pd.DataFrame(stats_rows)
         
-        # 2. Calculate Grand Total
-        total_wins = len(filtered[filtered['Result'] == 'Win'])
-        total_losses = len(filtered[filtered['Result'] == 'Loss'])
-        total_ties = len(filtered[filtered['Result'] == 'Tie'])
-        grand_total = total_wins + total_losses + total_ties
-        total_pct = (total_wins / grand_total * 100) if grand_total > 0 else 0
-        
+        # Add Total Row to Table
         total_row = {
-            "Sport": "TOTAL (All Sports)",
-            "Wins": total_wins,
-            "Losses": total_losses,
-            "Ties": total_ties,
-            "Total Games": grand_total,
-            "Win %": f"{total_pct:.1f}%"
+            "Sport": "TOTAL",
+            "Wins": wins,
+            "Losses": losses,
+            "Ties": ties,
+            "Total Games": total,
+            "Win %": f"{win_pct:.1f}%"
         }
-        
-        # 3. Combine and Display
         final_table = pd.concat([stats_df, pd.DataFrame([total_row])], ignore_index=True)
         
         st.dataframe(
-            final_table, 
-            use_container_width=True, 
+            final_table,
+            use_container_width=True,
             hide_index=True,
             column_config={
                 "Sport": st.column_config.TextColumn("Sport", width="medium"),
                 "Win %": st.column_config.TextColumn("Win %", width="small")
             }
         )
-        
+
         st.divider()
         
-        # --- EXISTING CHARTS & LOGS ---
+        # --- 3. CHARTS & LOGS (Existing) ---
         
         st.subheader("Result Timeline")
         # Timeline Chart
