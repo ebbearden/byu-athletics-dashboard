@@ -60,13 +60,20 @@ def fetch_ncaa_results(sport_slug="football", division="fbs", team_name="BYU"):
             
             for game in games:
                 # Look for BYU in the game names
-                home = game['game']['home']['names']['short']
-                away = game['game']['away']['names']['short']
+                try:
+                    home = game['game']['home']['names']['short']
+                    away = game['game']['away']['names']['short']
+                except KeyError:
+                    continue
                 
                 if team_name in home or team_name in away:
                     is_home = (team_name in home)
-                    my_score = game['game']['home']['score'] if is_home else game['game']['away']['score']
-                    op_score = game['game']['away']['score'] if is_home else game['game']['home']['score']
+                    try:
+                        my_score = game['game']['home']['score'] if is_home else game['game']['away']['score']
+                        op_score = game['game']['away']['score'] if is_home else game['game']['home']['score']
+                    except (KeyError, ValueError):
+                        continue # Skip if score is missing/empty
+                    
                     opponent = away if is_home else home
                     
                     # Determine Result
@@ -123,6 +130,9 @@ def save_to_github(new_df):
         st.error(f"GitHub Error: {e}")
         return False
 
+def convert_df_to_csv(df):
+    return df.to_csv(index=False).encode('utf-8')
+
 # --- 3. Main Application ---
 
 # Sidebar Navigation
@@ -168,8 +178,9 @@ if mode == "Admin Update":
                 st.dataframe(new_ncaa_df)
                 
                 if st.button("Confirm & Save to Database"):
-                    updated_df = pd.concat([df, new_ncaa_df], ignore_index=True)
-                    updated_df = updated_df.drop_duplicates(subset=['Date', 'Sport', 'Opposing Team']) # Prevent doubles
+                    # Put new data FIRST so it overrides old duplicates
+                    updated_df = pd.concat([new_ncaa_df, df], ignore_index=True)
+                    updated_df = updated_df.drop_duplicates(subset=['Date', 'Sport', 'Opposing Team'], keep='first')
                     
                     with st.spinner("Saving to GitHub..."):
                         if save_to_github(updated_df):
@@ -182,6 +193,28 @@ if mode == "Admin Update":
 
         # SECTION B: MANUAL UPLOAD
         st.subheader("📂 Manual CSV Upload")
+        
+        # --- NEW: TEMPLATE DOWNLOAD BUTTON ---
+        template_data = pd.DataFrame({
+            "Date": ["2024-11-18"],
+            "Sport": ["Football"],
+            "Opposing Team": ["Utah"],
+            "Score": ["22-21"],
+            "Result": ["Win"],
+            "Location": ["Away"],
+            "Event": ["Regular Season"]
+        })
+        csv_template = convert_df_to_csv(template_data)
+        
+        st.download_button(
+            label="📥 Download CSV Template",
+            data=csv_template,
+            file_name="upload_template.csv",
+            mime="text/csv",
+            help="Click to download an example file with the correct column headers."
+        )
+        # -------------------------------------
+
         st.info("Upload a CSV to bulk-add historical games.")
         uploaded_file = st.file_uploader("Upload CSV", type=["csv"])
         
@@ -190,8 +223,9 @@ if mode == "Admin Update":
             st.write("Preview:", new_data.head())
             
             if st.button("Merge Manual Upload"):
-                updated_df = pd.concat([df, new_data], ignore_index=True)
-                updated_df = updated_df.drop_duplicates(subset=['Date', 'Sport', 'Opposing Team'])
+                # Put new data FIRST so it overrides old duplicates
+                updated_df = pd.concat([new_data, df], ignore_index=True)
+                updated_df = updated_df.drop_duplicates(subset=['Date', 'Sport', 'Opposing Team'], keep='first')
                 
                 with st.spinner("Saving to GitHub..."):
                     if save_to_github(updated_df):
