@@ -114,6 +114,11 @@ def load_data():
         df['Opponent_Raw'] = df['Opposing Team'].fillna("Unknown").astype(str)
         df['Opposing Team'] = df['Opponent_Raw'].apply(clean_opponent_name)
         df['Result'] = df['Result'].astype(str).str.title()
+        
+        # --- NEW: FILTER OUT JUNK NAMES ---
+        df = df[~df['Opposing Team'].isin(['Opp', 'Opponent', 'TBD', 'Unknown', 'nan'])]
+        # ----------------------------------
+
         return df
     except FileNotFoundError:
         return pd.DataFrame()
