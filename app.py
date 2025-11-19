@@ -18,17 +18,21 @@ st.set_page_config(
 def clean_opponent_name(name):
     """Standardizes opponent names to avoid duplicates."""
     name = str(name).strip()
+    # This dictionary maps "Bad Name" : "Good Name"
     mappings = {
         "SDSU": "San Diego State",
         "San Diego St.": "San Diego State",
         "San Diego St": "San Diego State",
+        "Boise St": "Boise State",          # <-- Added this
+        "Boise St.": "Boise State",         # <-- Added this just in case
         "UVU": "Utah Valley",
         "Utah Valley State": "Utah Valley",
         "USC": "Southern California",
         "Southern Cal": "Southern California",
         "Ole Miss": "Mississippi",
         "LSU": "Louisiana State",
-        "Boise St": "Boise State"
+        "Wash St": "Washington State",      # <-- Likely another one you'll see
+        "Fresno St": "Fresno State"         # <-- And another
     }
     if name in mappings: return mappings[name]
     name = name.replace(".", "")
