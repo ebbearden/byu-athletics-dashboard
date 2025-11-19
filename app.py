@@ -27,7 +27,8 @@ def clean_opponent_name(name):
         "USC": "Southern California",
         "Southern Cal": "Southern California",
         "Ole Miss": "Mississippi",
-        "LSU": "Louisiana State"
+        "LSU": "Louisiana State",
+        "Boise St": "Boise State"
     }
     if name in mappings: return mappings[name]
     name = name.replace(".", "")
